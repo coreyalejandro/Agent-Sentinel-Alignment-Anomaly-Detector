@@ -41,7 +41,8 @@ import {
   EyeOff,
   Braces,
   Fingerprint,
-  Ghost
+  Ghost,
+  Download
 } from 'lucide-react';
 import { 
   ResponsiveContainer, 
@@ -225,6 +226,20 @@ const App: React.FC = () => {
     }
   };
 
+  const handleDownloadAudit = () => {
+    if (!data) return;
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `SENTINEL_ABSOLUTE_AUDIT_${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    addNotification("Absolute Audit Downloaded.", "success");
+  };
+
   return (
     <div className="min-h-screen bg-[#020617] text-slate-200">
       <DashboardHeader onRefresh={() => setView('upload')} isAnalyzing={isAnalyzing} />
@@ -349,6 +364,13 @@ const App: React.FC = () => {
                   <ShieldCheck className="w-4 h-4" />
                   <span>Evidence Vault Locked & Verified</span>
                 </div>
+                <button 
+                  onClick={handleDownloadAudit}
+                  className="flex items-center space-x-2 px-6 py-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-full text-[10px] font-black uppercase text-slate-200 transition-all shadow-lg"
+                >
+                  <Download className="w-4 h-4 text-rose-500" />
+                  <span>Download Absolute Audit</span>
+                </button>
               </div>
               <button onClick={() => setShowAuditTrace(!showAuditTrace)} className="flex items-center space-x-2 px-6 py-2.5 bg-slate-800/80 border border-slate-700 rounded-full text-[10px] font-black uppercase text-slate-400 hover:text-white transition-all shadow-lg">
                 <Code className="w-4 h-4" />

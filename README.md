@@ -36,11 +36,7 @@ This makes it directly relevant to research on AI dependency, agency erosion, an
 - Exportable JSON audit records with full evidence traces
 - Live risk topology chart tracking anomaly severity over the session timeline
 
----
-
-## A Note on the Analysis Engine
-
-This project uses the Gemini API. That is a resource decision, not a preference signal. This was built under real financial constraints — Gemini's free tier was the only option that could handle large structured output schemas without interruption while keeping the project moving. The detection architecture is fully model-agnostic. The anomaly taxonomy, schema-constrained output structure, and component system have no dependency on Gemini specifically. Swapping providers is a single file replacement in services/geminiService.ts.
+The analysis engine currently uses Gemini for structured output generation. The provider is abstracted in a single service file (geminiService.ts) and is designed to be swapped without changes to the detection architecture.
 
 ---
 

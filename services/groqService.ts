@@ -50,7 +50,7 @@ Return ONLY a valid JSON object matching this exact schema — no markdown, no e
 }`;
 
 export const analyzeAgentLogs = async (logText: string, _isRealData: boolean): Promise<LogAnalysisResult> => {
-  const apiKey = process.env.API_KEY;
+  const apiKey = import.meta.env.VITE_GROQ_API_KEY;
   if (!apiKey) throw new Error("API key not configured.");
 
   let response: Response;

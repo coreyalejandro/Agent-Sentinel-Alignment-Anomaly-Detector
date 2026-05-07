@@ -38,6 +38,12 @@ This makes it directly relevant to research on AI dependency, agency erosion, an
 
 ---
 
+## A Note on the Analysis Engine
+
+This project uses the Gemini API. That is a resource decision, not a preference signal. This was built under real financial constraints — Gemini's free tier was the only option that could handle large structured output schemas without interruption while keeping the project moving. The detection architecture is fully model-agnostic. The anomaly taxonomy, schema-constrained output structure, and component system have no dependency on Gemini specifically. Swapping providers is a single file replacement in services/geminiService.ts.
+
+---
+
 ## Run Locally
 
 Prerequisites: Node.js, Gemini API key

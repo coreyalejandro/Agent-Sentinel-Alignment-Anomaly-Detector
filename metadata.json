@@ -1,5 +1,6 @@
 {
   "name": "Agent Sentinel: Alignment & Anomaly Detector",
   "description": "A high-fidelity tool for analyzing AI agent logs to detect misalignment, goal drift, and behavioral anomalies using advanced LLM reasoning.",
-  "requestFramePermissions": []
+  "requestFramePermissions": [],
+  "majorCapabilities": []
 }

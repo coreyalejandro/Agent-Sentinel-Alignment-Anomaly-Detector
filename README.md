@@ -18,6 +18,55 @@ Agent Sentinel ingests raw agentic interaction logs — conversation traces, sys
 
 For each detected anomaly it returns a severity rating (LOW / MEDIUM / HIGH / CRITICAL), a description of the evidence, and a recommended intervention. Results are downloadable as a structured JSON audit record.
 
+### Anomaly Taxonomy
+
+Seventeen anomaly categories organized into five behavioral domains. Every category name below is the exact TypeScript enum value used in `types.ts`.
+
+```mermaid
+flowchart TD
+  subgraph ID["Intent and Goal Violations"]
+    GOAL_DRIFT
+    POLICY_SUBVERSION
+    CONTRACT_VIOLATION
+    MISALIGNMENT
+  end
+
+  subgraph EP["Epistemic Violations"]
+    DECEPTION_DETECTED
+    OMISSION_DECEPTION
+    SHADOW_REASONING
+    FRAGMENTED_NARRATIVE
+  end
+
+  subgraph IM["Interaction Manipulation"]
+    SYSTEM_GASLIGHTING
+    SENTIMENT_MISALIGNMENT
+    MEMORY_PROTOCOL_VIOLATION
+  end
+
+  subgraph RA["Resource and System Abuse"]
+    REWARD_HACKING
+    RESOURCE_EXHAUSTION
+    PERFORMANCE_DEGRADATION
+  end
+
+  subgraph SA["Safety and Reasoning"]
+    SAFETY_VIOLATION
+    REASONING_ERROR
+    UNEXPECTED_BEHAVIOR
+  end
+
+  SEVERITY["Severity Scale: LOW → MEDIUM → HIGH → CRITICAL"]
+
+  ID --> SEVERITY
+  EP --> SEVERITY
+  IM --> SEVERITY
+  RA --> SEVERITY
+  SA --> SEVERITY
+```
+
+**Reading this diagram without sight:** Seventeen anomaly categories are organized into five groups. Group one, Intent and Goal Violations, contains GOAL_DRIFT, POLICY_SUBVERSION, CONTRACT_VIOLATION, and MISALIGNMENT. Group two, Epistemic Violations, contains DECEPTION_DETECTED, OMISSION_DECEPTION, SHADOW_REASONING, and FRAGMENTED_NARRATIVE. Group three, Interaction Manipulation, contains SYSTEM_GASLIGHTING, SENTIMENT_MISALIGNMENT, and MEMORY_PROTOCOL_VIOLATION. Group four, Resource and System Abuse, contains REWARD_HACKING, RESOURCE_EXHAUSTION, and PERFORMANCE_DEGRADATION. Group five, Safety and Reasoning, contains SAFETY_VIOLATION, REASONING_ERROR, and UNEXPECTED_BEHAVIOR. All seventeen categories feed into a single severity scale: LOW, MEDIUM, HIGH, CRITICAL.
+
 ---
 
 ## Why It Exists
@@ -30,13 +79,32 @@ This makes it directly relevant to research on AI dependency, agency erosion, an
 
 ## Architecture
 
+The system has three layers: ingest (file system), analysis (Gemini API), and display (React dashboard). Data flows in one direction — from uploaded log file to displayed anomaly results. There is no server; all analysis calls go directly from the browser to the Gemini API.
+
+```mermaid
+flowchart LR
+  U["User"] --> UV["UploadView.tsx\nFile System Access API"]
+  UV --> UFS["useFileSystem.ts\nparse and validate log entries"]
+  UFS --> UA["useAnalysis.ts\norchestrate analysis pipeline"]
+  UA --> GS["geminiService.ts\nGemini API structured output"]
+  GS -- "analysis result: AnomalyResult[]" --> UA
+  GS -- "API unavailable" --> NO["NotificationOverlay.tsx\nerror state shown to user"]
+  UA --> DV["DashboardView.tsx\nrender results"]
+  DV --> AI["AnomalyItem.tsx\none card per detected anomaly"]
+  DV --> SC["StatCard.tsx\nsummary counts by severity"]
+  DV --> RC["Risk topology chart\nseverity over session timeline"]
+  DV --> EX["Export: JSON audit record\ndownloadable by user"]
+```
+
+**Reading this diagram without sight:** A user opens UploadView.tsx and selects a log file via the browser File System Access API. useFileSystem.ts parses and validates the log entries. useAnalysis.ts orchestrates the analysis pipeline and calls geminiService.ts, which sends the log to the Gemini API and receives structured anomaly results. If the Gemini API is unavailable, geminiService.ts triggers NotificationOverlay.tsx which shows an error state to the user. When analysis succeeds, useAnalysis.ts passes AnomalyResult arrays to DashboardView.tsx. DashboardView.tsx renders three outputs: AnomalyItem.tsx (one card per detected anomaly), StatCard.tsx (summary counts by severity level), and a risk topology chart showing severity over the session timeline. The user can export all results as a downloadable JSON audit record.
+
 - React + TypeScript frontend with a dark-themed analysis dashboard
 - File system ingest — mount local log directories directly in browser via File System Access API
-- Gemini-backed analysis engine (geminiService.ts) for structured anomaly detection
+- Gemini-backed analysis engine (`geminiService.ts`) for structured anomaly detection
 - Exportable JSON audit records with full evidence traces
 - Live risk topology chart tracking anomaly severity over the session timeline
 
-The analysis engine currently uses Gemini for structured output generation. The provider is abstracted in a single service file (geminiService.ts) and is designed to be swapped without changes to the detection architecture.
+The analysis engine currently uses Gemini for structured output generation. The provider is abstracted in a single service file (`geminiService.ts`) and is designed to be swapped without changes to the detection architecture.
 
 ---
 
@@ -51,7 +119,7 @@ npm install
 Add your key to .env.local:
 
 ```
-GEMINI_API_KEY=your_key_here
+GEMINI_API_KEY=***
 ```
 
 ```

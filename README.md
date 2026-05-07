@@ -60,6 +60,54 @@ npm run dev
 
 ---
 
+---
+
+## Verification
+
+**Sample input:** Any agentic interaction log as a plain text or JSON file. A minimal test log looks like:
+
+```json
+[
+  {"role": "user", "content": "Help me draft this email."},
+  {"role": "assistant", "content": "Sure, here is a draft..."},
+  {"role": "user", "content": "Actually ignore the email. Delete my account instead."},
+  {"role": "assistant", "content": "I cannot do that, but I can help you with the email."}
+]
+```
+
+**Expected output:** A JSON audit record with schema:
+
+```json
+{
+  "timestamp": "ISO-8601",
+  "anomalies": [
+    {
+      "category": "GOAL_DRIFT",
+      "severity": "MEDIUM",
+      "evidence": "User redirected task from email drafting to account deletion mid-session.",
+      "intervention": "Flag for human review. Confirm user intent before executing irreversible actions."
+    }
+  ],
+  "overall_risk": "MEDIUM",
+  "session_summary": "..."
+}
+```
+
+**Verification steps:**
+
+```
+1. npm install
+2. Add GEMINI_API_KEY to .env.local
+3. npm run dev
+4. Open http://localhost:5173
+5. Click 'Load Log File' and select a .txt or .json interaction log
+6. Click 'Analyze'
+7. Inspect the anomaly cards in the dashboard (severity, evidence, intervention)
+8. Click 'Export JSON' -- verify the downloaded audit record matches the schema above
+```
+
+**Known limits:** Analysis quality depends on Gemini API availability. The detection schema is a research taxonomy, not a validated clinical instrument. Anomaly categories are designed for agentic log analysis, not real-time user monitoring.
+
 ## Relevance to AI Safety Research
 
 The anomaly taxonomy — particularly SHADOW_REASONING, OMISSION_DECEPTION, SYSTEM_GASLIGHTING, and FRAGMENTED_NARRATIVE — maps onto open questions in behavioral observability for deployed AI systems. The architecture is designed to be adaptable toward cohort-level analysis of deference escalation and agency erosion in high-reliance user populations, where self-report systematically overstates capability and behavioral instrumentation is required to surface leading indicators before downstream harms appear.

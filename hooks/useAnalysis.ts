@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { LogAnalysisResult } from '../types';
-import { analyzeAgentLogs } from '../services/groqService';
+import { analyzeAgentLogs } from '../services/geminiService';
 
 const MAX_FILE_SIZE = 1024 * 1024 * 5; // 5MB per file
 

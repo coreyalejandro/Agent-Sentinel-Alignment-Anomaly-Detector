@@ -6,7 +6,7 @@ import { LogAnalysisResult, AnomalyCategory, AnomalySeverity } from "../types";
 // constrained generation can be substituted by replacing this service module.
 // Gemini was selected for this prototype due to its free-tier availability and
 // native support for large structured output schemas with thinking budget control.
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY as string });
 
 const ANALYSIS_SCHEMA = {
   type: Type.OBJECT,

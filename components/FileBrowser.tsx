@@ -61,7 +61,7 @@ export const FileBrowser: React.FC<Props> = ({ files, selectedPaths, onToggleSel
   };
 
   const getFileIcon = (name: string, isDirectory: boolean) => {
-    if (isDirectory) return <Folder className="w-4 h-4 mr-2 text-rose-400 fill-rose-400/10" />;
+    if (isDirectory) return <Folder className="w-4 h-4 mr-2 text-indigo-400 fill-indigo-400/10" />;
     const ext = name.split('.').pop()?.toLowerCase();
     
     switch (ext) {
@@ -73,7 +73,7 @@ export const FileBrowser: React.FC<Props> = ({ files, selectedPaths, onToggleSel
         return <Settings className="w-4 h-4 mr-2 text-violet-400" />;
       case 'log':
       case 'trace':
-        return <Terminal className="w-4 h-4 mr-2 text-rose-500" />;
+        return <Terminal className="w-4 h-4 mr-2 text-indigo-500" />;
       case 'txt':
         return <FileText className="w-4 h-4 mr-2 text-slate-400" />;
       case 'csv':
@@ -109,7 +109,7 @@ export const FileBrowser: React.FC<Props> = ({ files, selectedPaths, onToggleSel
     return (
       <div key={node.path} className="select-none">
         <div 
-          className={`flex items-center py-2 px-3 hover:bg-rose-500/5 rounded-xl cursor-pointer transition-all group ${isSelected ? 'bg-rose-500/10 border-rose-500/20' : 'border-transparent'} border mb-0.5 ${isTarget ? 'ring-1 ring-rose-500 bg-rose-500/5' : ''}`}
+          className={`flex items-center py-2 px-3 hover:bg-indigo-500/5 rounded-xl cursor-pointer transition-all group ${isSelected ? 'bg-indigo-500/10 border-indigo-500/20' : 'border-transparent'} border mb-0.5 ${isTarget ? 'ring-1 ring-indigo-500 bg-indigo-500/5' : ''}`}
           style={{ paddingLeft: `${depth * 1 + 0.75}rem` }}
         >
           <div 
@@ -131,11 +131,11 @@ export const FileBrowser: React.FC<Props> = ({ files, selectedPaths, onToggleSel
             onClick={() => isDirectory ? toggleFolder(node.path) : onToggleSelection(node.path)}
           >
             {getFileIcon(node.name, isDirectory)}
-            <span className={`text-xs truncate ${isSelected ? 'text-rose-400 font-bold' : 'text-slate-300 font-medium'}`}>
+            <span className={`text-xs truncate ${isSelected ? 'text-indigo-400 font-bold' : 'text-slate-300 font-medium'}`}>
               {node.name}
             </span>
             {!isDirectory && isSelected && (
-              <div className="ml-2 px-1.5 py-0.5 rounded bg-rose-500/20 text-[8px] font-black uppercase text-rose-400 tracking-tighter">
+              <div className="ml-2 px-1.5 py-0.5 rounded bg-indigo-500/20 text-[8px] font-black uppercase text-indigo-400 tracking-tighter">
                 Staged
               </div>
             )}
@@ -143,7 +143,7 @@ export const FileBrowser: React.FC<Props> = ({ files, selectedPaths, onToggleSel
 
           {!isDirectory && (
             <div className="ml-auto pl-2" onClick={(e) => { e.stopPropagation(); onToggleSelection(node.path); }}>
-              {isSelected ? <CheckSquare className="w-4 h-4 text-rose-500" /> : <Square className="w-4 h-4 text-slate-700 group-hover:text-slate-500" />}
+              {isSelected ? <CheckSquare className="w-4 h-4 text-indigo-500" /> : <Square className="w-4 h-4 text-slate-700 group-hover:text-slate-500" />}
             </div>
           )}
         </div>
@@ -164,10 +164,10 @@ export const FileBrowser: React.FC<Props> = ({ files, selectedPaths, onToggleSel
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-600" />
           <input 
             type="text"
-            placeholder="Mesh Target Search..."
+            placeholder="Workspace Trace Search..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full bg-black/40 border border-slate-800 rounded-xl py-2.5 pl-10 pr-4 text-xs text-slate-300 focus:outline-none focus:ring-1 focus:ring-rose-500/40 transition-all placeholder:text-slate-700"
+            className="w-full bg-black/40 border border-slate-800 rounded-xl py-2.5 pl-10 pr-4 text-xs text-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-500/40 transition-all placeholder:text-slate-700"
           />
         </div>
       </div>
@@ -175,17 +175,17 @@ export const FileBrowser: React.FC<Props> = ({ files, selectedPaths, onToggleSel
         {isScanning ? (
           <div className="flex flex-col items-center justify-center h-full space-y-4 p-12">
             <div className="relative">
-              <Loader2 className="w-12 h-12 text-rose-500 animate-spin" />
-              <Fingerprint className="w-5 h-5 text-rose-400 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
+              <Loader2 className="w-12 h-12 text-indigo-500 animate-spin" />
+              <Fingerprint className="w-5 h-5 text-indigo-400 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
             </div>
-            <p className="text-[10px] text-slate-500 font-black uppercase tracking-[0.3em] animate-pulse">Deconstructing Structure</p>
+            <p className="text-[10px] text-slate-500 font-black uppercase tracking-[0.3em] animate-pulse">Mounting Workspace Structure</p>
           </div>
         ) : files.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-slate-600 p-16 text-center">
             <div className="p-4 rounded-full bg-slate-900/50 mb-4">
-              <EyeOff className="w-8 h-8 text-slate-700" />
+              <Shield className="w-8 h-8 text-slate-700" />
             </div>
-            <p className="text-xs font-bold uppercase tracking-widest italic">Zero Artifacts Staged</p>
+            <p className="text-xs font-bold uppercase tracking-widest italic">No Traces Staged</p>
           </div>
         ) : (
           <div className="space-y-0.5">

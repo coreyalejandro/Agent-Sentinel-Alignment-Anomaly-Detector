@@ -11,7 +11,14 @@
     ],
     "skipLibCheck": true,
     "types": [
+<<<<<<< HEAD
       "node"
+=======
+      "node",
+      "vite/client",
+      "jest",
+      "@testing-library/jest-dom"
+>>>>>>> ea0fc0a (feat: Implement ErrorBoundary component with tests)
     ],
     "moduleResolution": "bundler",
     "isolatedModules": true,
@@ -20,10 +27,30 @@
     "jsx": "react-jsx",
     "paths": {
       "@/*": [
-        "./*"
+        "./src/*"
       ]
     },
     "allowImportingTsExtensions": true,
-    "noEmit": true
-  }
+    "noEmit": true,
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noPropertyAccessFromIndexSignature": true
+  },
+  "include": [
+    "src/**/*",
+    "*.ts",
+    "*.tsx"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "build"
+  ]
 }
+</file>

@@ -28,6 +28,7 @@
     "allowImportingTsExtensions": true,
     "noEmit": true,
     "strict": true,
+    "forceConsistentCasingInFileNames": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "exactOptionalPropertyTypes": true,

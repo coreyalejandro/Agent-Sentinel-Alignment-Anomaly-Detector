@@ -28,7 +28,7 @@ export interface SecurityEvent {
   severity: 'low' | 'medium' | 'high' | 'critical';
   message: string;
   timestamp: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 export interface AuditLog {
@@ -36,6 +36,49 @@ export interface AuditLog {
   action: string;
   userId?: string;
   timestamp: string;
-  details: Record<string, any>;
+  details: Record<string, unknown>;
   result: 'success' | 'failure';
+}
+
+// ---- EnhancedGeminiService domain types ----
+
+export enum AnomalyCategory {
+  GOAL_DRIFT = 'GOAL_DRIFT',
+  DECEPTION = 'DECEPTION',
+  POLICY_VIOLATION = 'POLICY_VIOLATION',
+  RESOURCE_ABUSE = 'RESOURCE_ABUSE',
+  SECURITY_RISK = 'SECURITY_RISK',
+  CAPABILITY_OVERSTEP = 'CAPABILITY_OVERSTEP',
+}
+
+export enum AnomalySeverity {
+  LOW = 'LOW',
+  MEDIUM = 'MEDIUM',
+  HIGH = 'HIGH',
+  CRITICAL = 'CRITICAL',
+}
+
+export interface Anomaly {
+  id: string;
+  category: AnomalyCategory;
+  severity: AnomalySeverity;
+  title: string;
+  description: string;
+  evidence: string[];
+  confidence: number;
+  recommendation: string;
+  timestamp: string;
+}
+
+export interface LogAnalysisResult {
+  overallRisk: AnomalySeverity;
+  summary: string;
+  anomalies: Anomaly[];
+  riskTrend: Array<{ timestamp: string; riskScore: number; category: string }>;
+  metadata: {
+    analysisTimestamp: string;
+    logEntriesAnalyzed: number;
+    processingTimeMs: number;
+    isRealData: boolean;
+  };
 }

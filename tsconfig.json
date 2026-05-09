@@ -7,18 +7,13 @@
     "lib": [
       "ES2022",
       "DOM",
-      "DOM.Iterable"
+      "DOM.Iterable",
+      "ESNext"
     ],
     "skipLibCheck": true,
     "types": [
-<<<<<<< HEAD
-      "node"
-=======
       "node",
-      "vite/client",
-      "jest",
-      "@testing-library/jest-dom"
->>>>>>> ea0fc0a (feat: Implement ErrorBoundary component with tests)
+      "vite/client"
     ],
     "moduleResolution": "bundler",
     "isolatedModules": true,
@@ -50,7 +45,8 @@
   "exclude": [
     "node_modules",
     "dist",
-    "build"
+    "build",
+    "src/**/*.test.*",
+    "src/test/**/*"
   ]
 }
-</file>

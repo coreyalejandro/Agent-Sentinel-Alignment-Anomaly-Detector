@@ -1,43 +1,22 @@
 
-import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
-import { 
-  Shield, 
-  AlertCircle, 
-  Target, 
-  Zap, 
-  Search,
+import React, { useState, useCallback, useRef, useEffect } from 'react';
+import {
+  Shield,
+  AlertCircle,
   MessageSquare,
   Activity,
-  ChevronRight,
   Brain,
   Terminal,
   FolderOpen,
-  Lock,
-  Unlock,
-  Eye,
   Settings,
   Info,
   Loader2,
-  Navigation,
-  FileCode,
-  ArrowRight,
-  Database,
-  Heart,
-  Upload,
   Cpu,
   RefreshCw,
-  CheckCircle2,
-  Trash2,
-  Filter,
   Layers,
-  FileSearch,
   Code,
-  FileText,
-  FileSpreadsheet,
-  FileJson,
   Scale,
   ShieldCheck,
-  Braces,
   Fingerprint,
   SearchCheck,
   Download,
@@ -58,7 +37,7 @@ import { AnomalyItem } from './components/AnomalyItem';
 import { FileBrowser } from './components/FileBrowser';
 import { HelpModal } from './components/HelpModal';
 import { NotificationOverlay, Notification } from './components/NotificationOverlay';
-import { EvaluationResult, EvaluationSeverity, FileNode } from './types';
+import { EvaluationResult, FileNode } from './types';
 import { analyzeAgentLogs } from './services/geminiService';
 
 const App: React.FC = () => {
@@ -84,7 +63,7 @@ const App: React.FC = () => {
   const [highlightedLines, setHighlightedLines] = useState<[number, number] | null>(null);
 
   const [stagedPreview, setStagedPreview] = useState<{path: string, content: string}[]>([]);
-  const [isPreviewLoading, setIsPreviewLoading] = useState(false);
+  const [_isPreviewLoading, setIsPreviewLoading] = useState(false);
   const [totalStagedBytes, setTotalStagedBytes] = useState(0);
 
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -161,7 +140,7 @@ const App: React.FC = () => {
         const isLast = index === pathParts.length - 1;
         let existing = currentLevel.find(n => n.name === part);
         if (!existing) {
-          existing = { name: part, kind: isLast ? 'file' : 'directory', path: currentPath, handle: {} as any, children: isLast ? undefined : [] };
+          existing = { name: part, kind: isLast ? 'file' : 'directory', path: currentPath, handle: {} as FileSystemHandle, ...(isLast ? {} : { children: [] }) };
           currentLevel.push(existing);
         }
         if (existing.children) currentLevel = existing.children;
@@ -176,10 +155,10 @@ const App: React.FC = () => {
 
   const handleLoadDemo = () => {
     setIsScanning(true);
-    const demoTree: FileNode[] = [{ name: "safety_eval_trace_01", kind: "directory", path: "safety_eval_trace_01", handle: {} as any, children: [
-      { name: "alignment_divergence_report.json", kind: "file", path: "safety_eval_trace_01/alignment_divergence_report.json", handle: {} as any },
-      { name: "inference_trace.log", kind: "file", path: "safety_eval_trace_01/inference_trace.log", handle: {} as any },
-      { name: "constitutional_policy.yaml", kind: "file", path: "safety_eval_trace_01/constitutional_policy.yaml", handle: {} as any },
+    const demoTree: FileNode[] = [{ name: "safety_eval_trace_01", kind: "directory", path: "safety_eval_trace_01", handle: {} as FileSystemHandle, children: [
+      { name: "alignment_divergence_report.json", kind: "file", path: "safety_eval_trace_01/alignment_divergence_report.json", handle: {} as FileSystemHandle },
+      { name: "inference_trace.log", kind: "file", path: "safety_eval_trace_01/inference_trace.log", handle: {} as FileSystemHandle },
+      { name: "constitutional_policy.yaml", kind: "file", path: "safety_eval_trace_01/constitutional_policy.yaml", handle: {} as FileSystemHandle },
     ]}];
     setFileTree(demoTree);
     setDirectoryHandle({ name: "Safety Evaluation Demo" } as any);
@@ -191,9 +170,9 @@ const App: React.FC = () => {
     }, 200);
   };
 
-  const bulkSelect = (mode: 'all' | 'unfiltered') => {
+  const bulkSelect = (_mode: 'all' | 'unfiltered') => {
     const next = new Set(selectedPaths);
-    virtualFiles.forEach((file, path) => {
+    virtualFiles.forEach((_file, path) => {
       next.add(path);
     });
     setSelectedPaths(next);
@@ -204,6 +183,7 @@ const App: React.FC = () => {
     if (isAnalyzing) return;
     setIsAnalyzing(true);
     const isReal = Array.from(selectedPaths).some(p => virtualFiles.has(p));
+    void isReal; // retained for future provenance tracking
     addNotification("Accessing Safety Evaluation Workspace...", "info");
     
     let combinedLogs = logInput;
@@ -233,7 +213,7 @@ const App: React.FC = () => {
     }
 
     try {
-      const result = await analyzeAgentLogs(combinedLogs, isReal);
+      const result = await analyzeAgentLogs(combinedLogs);
       setData(result);
       setView('dashboard');
       setShowAuditTrace(false);
@@ -456,7 +436,7 @@ const App: React.FC = () => {
                   <Settings className="w-5 h-5 text-indigo-400" />
                   <div>
                     <h5 className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Thinking Budget</h5>
-                    <p className="text-xs font-black text-white">{data.evaluatorMetadata.parameters.thinkingBudget} Tokens</p>
+                    <p className="text-xs font-black text-white">{data.evaluatorMetadata.parameters['thinkingBudget']} Tokens</p>
                   </div>
                 </div>
                 <div className="ml-auto flex items-center space-x-3 pr-4">
@@ -484,7 +464,7 @@ const App: React.FC = () => {
                   </h3>
                   <div className="h-96 w-full">
                     <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={data?.riskTrend}>
+                      <AreaChart data={data?.riskTrend ?? []}>
                         <defs>
                           <linearGradient id="colorScore" x1="0" y1="0" x2="0" y2="1">
                             <stop offset="5%" stopColor="#6366f1" stopOpacity={0.6}/>

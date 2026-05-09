@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { LogAnalysisResult } from '../../types';
+import { LogAnalysisResult } from '../types';
 import { analyzeAgentLogs } from '../services/enhancedGeminiService';
 import { logger } from '../utils/logger';
 import { performanceMonitor } from '../utils/performance';

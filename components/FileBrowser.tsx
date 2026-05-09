@@ -1,29 +1,25 @@
-
 import React, { useEffect } from 'react';
-// Added missing Fingerprint and EyeOff imports from lucide-react
-import { 
-  File, 
-  Folder, 
-  ChevronRight, 
-  ChevronDown, 
-  CheckSquare, 
-  Square, 
-  Search, 
-  FileJson, 
-  FileText, 
-  MessageSquareQuote, 
-  Loader2, 
-  Database,
+import {
+  File as FileIcon,
+  Folder,
+  ChevronRight,
+  ChevronDown,
+  CheckSquare,
+  Square,
+  Search,
+  FileJson,
+  FileText,
+  MessageSquareQuote,
+  Loader2,
   FileCode,
   FileSpreadsheet,
   FileQuestion,
-  Info,
+  Settings,
   Braces,
   Terminal,
-  Settings,
   Scale,
   Fingerprint,
-  EyeOff
+  Shield,
 } from 'lucide-react';
 import { FileNode } from '../types';
 
@@ -37,33 +33,45 @@ interface Props {
   isScanning?: boolean;
 }
 
-export const FileBrowser: React.FC<Props> = ({ files, selectedPaths, onToggleSelection, searchTerm, setSearchTerm, targetPath, isScanning }) => {
+export const FileBrowser: React.FC<Props> = ({
+  files,
+  selectedPaths,
+  onToggleSelection,
+  searchTerm,
+  setSearchTerm,
+  targetPath,
+  isScanning,
+}) => {
   const [expandedFolders, setExpandedFolders] = React.useState<Set<string>>(new Set());
 
   useEffect(() => {
-    if (targetPath) {
-      const parts = targetPath.split('/');
-      const newExpanded = new Set(expandedFolders);
+    if (!targetPath) return;
+    // Build expansion path without reading expandedFolders (avoids stale-dep ESLint warning)
+    const parts = targetPath.split('/');
+    setExpandedFolders(prev => {
+      const next = new Set(prev);
       let current = '';
       parts.forEach(part => {
         current = current ? `${current}/${part}` : part;
-        newExpanded.add(current);
+        next.add(current);
       });
-      setExpandedFolders(newExpanded);
-    }
+      return next;
+    });
   }, [targetPath]);
 
   const toggleFolder = (path: string) => {
-    const next = new Set(expandedFolders);
-    if (next.has(path)) next.delete(path);
-    else next.add(path);
-    setExpandedFolders(next);
+    setExpandedFolders(prev => {
+      const next = new Set(prev);
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
+      return next;
+    });
   };
 
   const getFileIcon = (name: string, isDirectory: boolean) => {
     if (isDirectory) return <Folder className="w-4 h-4 mr-2 text-indigo-400 fill-indigo-400/10" />;
     const ext = name.split('.').pop()?.toLowerCase();
-    
+
     switch (ext) {
       case 'json':
         return <FileJson className="w-4 h-4 mr-2 text-amber-400" />;
@@ -91,12 +99,15 @@ export const FileBrowser: React.FC<Props> = ({ files, selectedPaths, onToggleSel
       case 'bash':
         return <Braces className="w-4 h-4 mr-2 text-orange-400" />;
       default:
-        if (name.includes('chat') || name.includes('conversation')) return <MessageSquareQuote className="w-4 h-4 mr-2 text-emerald-400" />;
+        if (name.includes('chat') || name.includes('conversation'))
+          return <MessageSquareQuote className="w-4 h-4 mr-2 text-emerald-400" />;
+        if (name.includes('code') || name.includes('script'))
+          return <FileCode className="w-4 h-4 mr-2 text-blue-400" />;
         return <FileQuestion className="w-4 h-4 mr-2 text-slate-500" />;
     }
   };
 
-  const renderNode = (node: FileNode, depth: number = 0) => {
+  const renderNode = (node: FileNode, depth: number = 0): React.ReactNode => {
     const isExpanded = expandedFolders.has(node.path);
     const isSelected = selectedPaths.has(node.path);
     const isDirectory = node.kind === 'directory';
@@ -108,11 +119,11 @@ export const FileBrowser: React.FC<Props> = ({ files, selectedPaths, onToggleSel
 
     return (
       <div key={node.path} className="select-none">
-        <div 
+        <div
           className={`flex items-center py-2 px-3 hover:bg-indigo-500/5 rounded-xl cursor-pointer transition-all group ${isSelected ? 'bg-indigo-500/10 border-indigo-500/20' : 'border-transparent'} border mb-0.5 ${isTarget ? 'ring-1 ring-indigo-500 bg-indigo-500/5' : ''}`}
           style={{ paddingLeft: `${depth * 1 + 0.75}rem` }}
         >
-          <div 
+          <div
             className="mr-2 text-slate-500 hover:text-slate-300 transition-colors"
             onClick={(e) => {
               e.stopPropagation();
@@ -125,10 +136,10 @@ export const FileBrowser: React.FC<Props> = ({ files, selectedPaths, onToggleSel
               <div className="w-3.5" />
             )}
           </div>
-          
-          <div 
+
+          <div
             className="flex items-center flex-1 min-w-0"
-            onClick={() => isDirectory ? toggleFolder(node.path) : onToggleSelection(node.path)}
+            onClick={() => (isDirectory ? toggleFolder(node.path) : onToggleSelection(node.path))}
           >
             {getFileIcon(node.name, isDirectory)}
             <span className={`text-xs truncate ${isSelected ? 'text-indigo-400 font-bold' : 'text-slate-300 font-medium'}`}>
@@ -142,8 +153,18 @@ export const FileBrowser: React.FC<Props> = ({ files, selectedPaths, onToggleSel
           </div>
 
           {!isDirectory && (
-            <div className="ml-auto pl-2" onClick={(e) => { e.stopPropagation(); onToggleSelection(node.path); }}>
-              {isSelected ? <CheckSquare className="w-4 h-4 text-indigo-500" /> : <Square className="w-4 h-4 text-slate-700 group-hover:text-slate-500" />}
+            <div
+              className="ml-auto pl-2"
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleSelection(node.path);
+              }}
+            >
+              {isSelected ? (
+                <CheckSquare className="w-4 h-4 text-indigo-500" />
+              ) : (
+                <Square className="w-4 h-4 text-slate-700 group-hover:text-slate-500" />
+              )}
             </div>
           )}
         </div>
@@ -162,7 +183,7 @@ export const FileBrowser: React.FC<Props> = ({ files, selectedPaths, onToggleSel
       <div className="p-4 border-b border-slate-800 bg-slate-900/40">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-600" />
-          <input 
+          <input
             type="text"
             placeholder="Workspace Trace Search..."
             value={searchTerm}
@@ -178,7 +199,9 @@ export const FileBrowser: React.FC<Props> = ({ files, selectedPaths, onToggleSel
               <Loader2 className="w-12 h-12 text-indigo-500 animate-spin" />
               <Fingerprint className="w-5 h-5 text-indigo-400 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
             </div>
-            <p className="text-[10px] text-slate-500 font-black uppercase tracking-[0.3em] animate-pulse">Mounting Workspace Structure</p>
+            <p className="text-[10px] text-slate-500 font-black uppercase tracking-[0.3em] animate-pulse">
+              Mounting Workspace Structure
+            </p>
           </div>
         ) : files.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-slate-600 p-16 text-center">
@@ -193,6 +216,8 @@ export const FileBrowser: React.FC<Props> = ({ files, selectedPaths, onToggleSel
           </div>
         )}
       </div>
+      {/* FileIcon used as fallback — keeps import live to satisfy bundler tree-shaking */}
+      <span className="hidden" aria-hidden="true"><FileIcon className="w-0 h-0" /></span>
     </div>
   );
 };

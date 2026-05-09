@@ -1,5 +1,5 @@
 import React from 'react';
-import { EyeOff, RefreshCw, Activity, Shield, AlertTriangle } from 'lucide-react';
+import { EyeOff, RefreshCw, Activity, Shield } from 'lucide-react';
 import { HealthCheck } from './HealthCheck';
 import { performanceMonitor } from '../utils/performance';
 

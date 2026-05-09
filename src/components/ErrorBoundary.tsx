@@ -1,4 +1,4 @@
-import React, { Component, ErrorInfo, ReactNode } from 'react';
+import { Component, ErrorInfo, ReactNode } from 'react';
 import { AlertTriangle, RefreshCw, Home } from 'lucide-react';
 import { logger } from '../utils/logger';
 
@@ -23,27 +23,24 @@ export class ErrorBoundary extends Component<Props, State> {
     return { hasError: true, error };
   }
 
-  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+  override componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
     logger.error('Error boundary caught an error', error, {
-      componentStack: errorInfo.componentStack,
+      componentStack: errorInfo.componentStack ?? '',
       errorBoundary: true,
     });
 
-    this.setState({
-      error,
-      errorInfo,
-    });
+    this.setState({ error, errorInfo });
   }
 
-  private handleRetry = () => {
-    this.setState({ hasError: false, error: undefined, errorInfo: undefined });
+  private handleRetry = (): void => {
+    this.setState({ hasError: false });
   };
 
-  private handleGoHome = () => {
+  private handleGoHome = (): void => {
     window.location.href = '/';
   };
 
-  render() {
+  override render(): ReactNode {
     if (this.state.hasError) {
       if (this.props.fallback) {
         return this.props.fallback;

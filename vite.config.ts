@@ -4,7 +4,7 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, '.', '');
-  
+
   return {
     server: {
       port: 3000,
@@ -17,9 +17,9 @@ export default defineConfig(({ mode }) => {
     },
     plugins: [react()],
     define: {
-      'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-      'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-      '__APP_VERSION__': JSON.stringify(process.env.npm_package_version || '1.0.0'),
+      'process.env.API_KEY': JSON.stringify(env['GEMINI_API_KEY']),
+      'process.env.GEMINI_API_KEY': JSON.stringify(env['GEMINI_API_KEY']),
+      '__APP_VERSION__': JSON.stringify(process.env['npm_package_version'] || '1.0.0'),
     },
     resolve: {
       alias: {
@@ -28,7 +28,7 @@ export default defineConfig(({ mode }) => {
     },
     build: {
       target: 'es2022',
-      minify: 'terser',
+      minify: 'esbuild',
       sourcemap: mode === 'development',
       rollupOptions: {
         output: {
@@ -37,12 +37,6 @@ export default defineConfig(({ mode }) => {
             charts: ['recharts'],
             icons: ['lucide-react'],
           },
-        },
-      },
-      terserOptions: {
-        compress: {
-          drop_console: mode === 'production',
-          drop_debugger: mode === 'production',
         },
       },
     },

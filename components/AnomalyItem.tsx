@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { AlertTriangle, ChevronDown, ChevronUp, Info, Heart, Frown, ShieldAlert, Cpu, Database, Activity, Scale, Shield, Brain, SearchCheck, Fingerprint } from 'lucide-react';
+import { AlertTriangle, ChevronDown, ChevronUp, Info, Heart, Frown, ShieldAlert, Cpu, Activity, Scale, Shield, Brain, SearchCheck, Fingerprint } from 'lucide-react';
 import { SafetyConcern, EvaluationSeverity, EvaluationCategory } from '../types';
 
 interface Props {

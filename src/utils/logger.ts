@@ -40,13 +40,14 @@ class Logger {
   }
 
   private createLogEntry(level: LogLevel, message: string, context?: Record<string, any>, error?: Error): LogEntry {
-    return {
+    const entry: LogEntry = {
       timestamp: new Date().toISOString(),
       level,
       message,
-      context,
-      error,
     };
+    if (context !== undefined) entry.context = context;
+    if (error !== undefined) entry.error = error;
+    return entry;
   }
 
   private addLog(entry: LogEntry): void {

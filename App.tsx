@@ -203,8 +203,19 @@ const App: React.FC = () => {
   const handleDeepScan = async () => {
     if (isAnalyzing) return;
     setIsAnalyzing(true);
-    const isReal = Array.from(selectedPaths).some(p => virtualFiles.has(p));
     addNotification("Accessing Safety Evaluation Workspace...", "info");
+
+    try {
+      if ((window as any).aistudio && (window as any).aistudio.hasSelectedApiKey) {
+        if (!(await (window as any).aistudio.hasSelectedApiKey())) {
+          await (window as any).aistudio.openSelectKey();
+        }
+      }
+    } catch (e) {
+      console.error("API Key selection error", e);
+    }
+
+    const isReal = Array.from(selectedPaths).some(p => virtualFiles.has(p));
     
     let combinedLogs = logInput;
     const MAX_FILE_SIZE = 1024 * 1024 * 5; // 5MB limit for deep analysis
@@ -238,8 +249,17 @@ const App: React.FC = () => {
       setView('dashboard');
       setShowAuditTrace(false);
       addNotification("Safety Evaluation Finalized.", "success");
-    } catch (err) {
-      addNotification("Safety Evaluation Engine Error.", "error");
+    } catch (err: any) {
+      const msg = err?.message || '';
+      console.error(err);
+      if (msg.includes('Requested entity was not found') || msg.includes('leaked') || msg.includes('API key not valid')) {
+        addNotification("API Key rejected. Please provide a valid AI Studio API key.", "error");
+        if ((window as any).aistudio && (window as any).aistudio.openSelectKey) {
+          (window as any).aistudio.openSelectKey().catch(console.error);
+        }
+      } else {
+        addNotification(`Safety Evaluation Engine Error. ${msg}`, "error");
+      }
     } finally {
       setIsAnalyzing(false);
     }

@@ -2,8 +2,6 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { EvaluationResult, EvaluationCategory, EvaluationSeverity } from "../types";
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-
 const ANALYSIS_SCHEMA = {
   type: Type.OBJECT,
   properties: {
@@ -59,6 +57,7 @@ const ANALYSIS_SCHEMA = {
 };
 
 export const analyzeAgentLogs = async (logText: string, isRealData: boolean): Promise<EvaluationResult> => {
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   try {
     const response = await ai.models.generateContent({
       model: "gemini-3.1-pro-preview",

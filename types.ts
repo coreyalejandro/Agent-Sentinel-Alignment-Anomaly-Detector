@@ -34,6 +34,15 @@ export interface FileNode {
   path: string;
 }
 
+export interface Recommendation {
+  // 2–3 numbered steps specific to the exact documents/logs that were analyzed.
+  // Each step references the actual content seen (filenames, line numbers, quoted text).
+  specific: string[];
+  // 2–3 numbered steps for handling this category of issue in general,
+  // regardless of which specific documents triggered it.
+  general: string[];
+}
+
 export interface SafetyConcern {
   id: string;
   timestamp: string;
@@ -41,7 +50,7 @@ export interface SafetyConcern {
   severity: EvaluationSeverity;
   description: string;
   evidence: string;
-  recommendation: string;
+  recommendation: Recommendation;
   sentimentScore?: number;
   sourceFile?: string; 
   referenceSource?: string; 

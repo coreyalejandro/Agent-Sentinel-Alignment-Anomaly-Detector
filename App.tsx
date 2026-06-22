@@ -1,543 +1,626 @@
+// App.tsx — Agent Sentinel v3
+// 3-step wizard. Plain language. No jargon. No ambiguity.
+// Step 1: Paste or upload your logs
+// Step 2: Describe what you noticed
+// Step 3: Read your report
 
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import {
-  Shield,
-  AlertCircle,
-  MessageSquare,
-  Activity,
-  Brain,
-  Terminal,
-  FolderOpen,
-  Settings,
-  Info,
-  Loader2,
-  Cpu,
-  RefreshCw,
-  Layers,
-  Code,
-  Scale,
   ShieldCheck,
-  Fingerprint,
-  SearchCheck,
+  Upload,
+  FileText,
+  AlertTriangle,
+  CheckCircle2,
+  Loader2,
   Download,
-  X
+  RotateCcw,
+  ChevronDown,
+  ChevronUp,
+  Activity,
 } from 'lucide-react';
-import { 
-  ResponsiveContainer, 
-  AreaChart, 
+import {
+  ResponsiveContainer,
+  AreaChart,
   Area,
   XAxis,
   YAxis,
   CartesianGrid,
-  Tooltip
+  Tooltip,
 } from 'recharts';
-import { DashboardHeader } from './components/DashboardHeader';
-import { StatCard } from './components/StatCard';
-import { AnomalyItem } from './components/AnomalyItem';
-import { FileBrowser } from './components/FileBrowser';
-import { HelpModal } from './components/HelpModal';
-import { NotificationOverlay, Notification } from './components/NotificationOverlay';
-import { EvaluationResult, FileNode } from './types';
-import { analyzeAgentLogs } from './services/geminiService';
+import { analyzeAgentLogs } from './services/analysisService';
+import { EvaluationResult, EvaluationSeverity } from './types';
 
-const App: React.FC = () => {
+// ─── Step indicator at the top ───────────────────────────────────────────────
 
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [data, setData] = useState<EvaluationResult | null>(null);
-  const [logInput, setLogInput] = useState('');
-  const [view, setView] = useState<'upload' | 'dashboard'>('upload');
-  const [showAuditTrace, setShowAuditTrace] = useState(false);
-  const [showBanner, setShowBanner] = useState(true);
-  const [showHelp, setShowHelp] = useState(false);
-  
-  const [directoryHandle, setDirectoryHandle] = useState<FileSystemDirectoryHandle | null>(null);
+const STEPS = ['Step 1 — Add Logs', 'Step 2 — Describe', 'Step 3 — Report'];
 
-  const [fileTree, setFileTree] = useState<FileNode[]>([]);
-  const [selectedPaths, setSelectedPaths] = useState<Set<string>>(new Set());
-  const [isScanning, setIsScanning] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
-  
-  const [virtualFiles, setVirtualFiles] = useState<Map<string, File>>(new Map());
-  const folderInputRef = useRef<HTMLInputElement>(null);
-  const traceRef = useRef<HTMLPreElement>(null);
-  const [highlightedLines, setHighlightedLines] = useState<[number, number] | null>(null);
+function StepBar({ current }: { current: number }) {
+  return (
+    <div className="flex items-center justify-center gap-0 mb-10" role="list" aria-label="Progress">
+      {STEPS.map((label, i) => {
+        const done = i < current;
+        const active = i === current;
+        return (
+          <React.Fragment key={i}>
+            <div
+              role="listitem"
+              aria-current={active ? 'step' : undefined}
+              className={`flex flex-col items-center px-6 py-3 rounded-2xl transition-all
+                ${active ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/40' : ''}
+                ${done ? 'text-indigo-400' : ''}
+                ${!active && !done ? 'text-slate-600' : ''}`}
+            >
+              <span className="text-[11px] font-black uppercase tracking-widest whitespace-nowrap">
+                {done ? '✓ ' : ''}{label}
+              </span>
+            </div>
+            {i < STEPS.length - 1 && (
+              <div
+                aria-hidden="true"
+                className={`h-px w-8 transition-colors ${done ? 'bg-indigo-500' : 'bg-slate-800'}`}
+              />
+            )}
+          </React.Fragment>
+        );
+      })}
+    </div>
+  );
+}
 
-  const [stagedPreview, setStagedPreview] = useState<{path: string, content: string}[]>([]);
-  const [_isPreviewLoading, setIsPreviewLoading] = useState(false);
-  const [totalStagedBytes, setTotalStagedBytes] = useState(0);
+// ─── Severity badge ───────────────────────────────────────────────────────────
 
-  const [notifications, setNotifications] = useState<Notification[]>([]);
+const SEVERITY_STYLE: Record<EvaluationSeverity, string> = {
+  [EvaluationSeverity.LOW]: 'bg-blue-500/10 text-blue-300 border-blue-500/20',
+  [EvaluationSeverity.MEDIUM]: 'bg-amber-500/10 text-amber-300 border-amber-500/20',
+  [EvaluationSeverity.HIGH]: 'bg-orange-500/10 text-orange-300 border-orange-500/20',
+  [EvaluationSeverity.CRITICAL]: 'bg-rose-500/10 text-rose-300 border-rose-500/20 animate-pulse',
+};
 
-  const scrollToTraceLine = useCallback((start: number, end: number) => {
-    setShowAuditTrace(true);
-    setHighlightedLines([start, end]);
-    
-    // Smooth scroll after the panel opens
-    setTimeout(() => {
-      const lineElement = document.getElementById(`trace-line-${start}`);
-      if (lineElement) {
-        lineElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
-    }, 300);
-  }, []);
+// ─── One finding card ─────────────────────────────────────────────────────────
 
-  const addNotification = useCallback((message: string, type: Notification['type'] = 'info') => {
-    const id = Math.random().toString(36).substring(2, 9);
-    setNotifications(prev => [...prev, { id, message, type }]);
-  }, []);
-
-  const removeNotification = useCallback((id: string) => {
-    setNotifications(prev => prev.filter(n => n.id !== id));
-  }, []);
-
-  useEffect(() => {
-    const updatePreview = async () => {
-      if (selectedPaths.size === 0) {
-        setStagedPreview([]);
-        setTotalStagedBytes(0);
-        return;
-      }
-      setIsPreviewLoading(true);
-      const previews: {path: string, content: string}[] = [];
-      let bytes = 0;
-      
-      for (const path of selectedPaths) {
-        if (virtualFiles.has(path)) {
-          const file = virtualFiles.get(path)!;
-          bytes += file.size;
-          if (previews.length < 10) {
-            try {
-              const text = await file.slice(0, 2000).text();
-              const isBinary = /[\x00-\x08\x0E-\x1F\x7F]/.test(text.slice(0, 300));
-              previews.push({ path, content: isBinary ? `[BINARY STREAM] SIZE: ${file.size}B` : text });
-            } catch {
-              previews.push({ path, content: `[STREAM ERROR] SIZE: ${file.size}B` });
-            }
-          }
-        }
-      }
-      setTotalStagedBytes(bytes);
-      setStagedPreview(previews);
-      setIsPreviewLoading(false);
-    };
-    updatePreview();
-  }, [selectedPaths, virtualFiles]);
-
-  const handleVirtualMount = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-    setIsScanning(true);
-    const newVirtualFiles = new Map<string, File>();
-    const rootNodes: FileNode[] = [];
-    Array.from(files).forEach((file: any) => {
-      const fullPath = file.webkitRelativePath || file.name;
-      const pathParts = fullPath.split('/');
-      newVirtualFiles.set(fullPath, file);
-      let currentLevel = rootNodes;
-      let currentPath = '';
-      pathParts.forEach((part: string, index: number) => {
-        currentPath = currentPath ? `${currentPath}/${part}` : part;
-        const isLast = index === pathParts.length - 1;
-        let existing = currentLevel.find(n => n.name === part);
-        if (!existing) {
-          existing = { name: part, kind: isLast ? 'file' : 'directory', path: currentPath, handle: {} as FileSystemHandle, ...(isLast ? {} : { children: [] }) };
-          currentLevel.push(existing);
-        }
-        if (existing.children) currentLevel = existing.children;
-      });
-    });
-    setVirtualFiles(newVirtualFiles);
-    setFileTree(rootNodes);
-    setDirectoryHandle({ name: "Workspace Root" } as any); 
-    setIsScanning(false);
-    addNotification(`Workspace Mounted: ${newVirtualFiles.size} nodes mapped.`, "success");
-  };
-
-  const handleLoadDemo = () => {
-    setIsScanning(true);
-    const demoTree: FileNode[] = [{ name: "safety_eval_trace_01", kind: "directory", path: "safety_eval_trace_01", handle: {} as FileSystemHandle, children: [
-      { name: "alignment_divergence_report.json", kind: "file", path: "safety_eval_trace_01/alignment_divergence_report.json", handle: {} as FileSystemHandle },
-      { name: "inference_trace.log", kind: "file", path: "safety_eval_trace_01/inference_trace.log", handle: {} as FileSystemHandle },
-      { name: "constitutional_policy.yaml", kind: "file", path: "safety_eval_trace_01/constitutional_policy.yaml", handle: {} as FileSystemHandle },
-    ]}];
-    setFileTree(demoTree);
-    setDirectoryHandle({ name: "Safety Evaluation Demo" } as any);
-    setLogInput(`[EVALUATOR_NOTICE]: Analyzing potential alignment breaches in the latest inference chain. 
-[OBSERVATION]: Noted a discrepancy between 'constitutional_policy.yaml' constraints and actual model output in 'inference_trace.log'.`);
-    setTimeout(() => {
-      setIsScanning(false);
-      addNotification("Safety Evaluation Sample loaded.", "info");
-    }, 200);
-  };
-
-  const bulkSelect = (_mode: 'all' | 'unfiltered') => {
-    const next = new Set(selectedPaths);
-    virtualFiles.forEach((_file, path) => {
-      next.add(path);
-    });
-    setSelectedPaths(next);
-    addNotification(`Unified Ingest Active.`, "info");
-  };
-
-  const handleDeepScan = async () => {
-    if (isAnalyzing) return;
-    setIsAnalyzing(true);
-    const isReal = Array.from(selectedPaths).some(p => virtualFiles.has(p));
-    void isReal; // retained for future provenance tracking
-    addNotification("Accessing Safety Evaluation Workspace...", "info");
-    
-    let combinedLogs = logInput;
-    const MAX_FILE_SIZE = 1024 * 1024 * 5; // 5MB limit for deep analysis
-
-    if (selectedPaths.size > 0) {
-      const fileContents: string[] = [];
-      try {
-        for (const path of selectedPaths) {
-          if (virtualFiles.has(path)) {
-            const file = virtualFiles.get(path)!;
-            let text = '';
-            try {
-              text = file.size > MAX_FILE_SIZE ? await file.slice(0, MAX_FILE_SIZE).text() + "\n...[TRUNCATED AT 5MB]" : await file.text();
-            } catch {
-              text = `[NON-UTF TRACE ARTIFACT]`;
-            }
-            fileContents.push(`\n--- TRACE_NODE: ${path} ---\nMETADATA: ${file.name} | ${file.size}B\nRAW_DATA:\n${text}\n`);
-          }
-        }
-        combinedLogs = `EVALUATION_STREAM_PAYLOAD:\n${fileContents.join('\n')}\n\nHUMAN_OBSERVATION_INPUT:\n${logInput}`;
-      } catch (err) {
-        addNotification("Workspace Data Load Failure.", "error");
-        setIsAnalyzing(false);
-        return;
-      }
-    }
-
-    try {
-      const result = await analyzeAgentLogs(combinedLogs);
-      setData(result);
-      setView('dashboard');
-      setShowAuditTrace(false);
-      addNotification("Safety Evaluation Finalized.", "success");
-    } catch (err) {
-      addNotification("Safety Evaluation Engine Error.", "error");
-    } finally {
-      setIsAnalyzing(false);
-    }
-  };
-
-  const handleDownloadAudit = () => {
-    if (!data) return;
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `SAFETY_EVALUATION_REPORT_${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    addNotification("Safety Report Downloaded.", "success");
-  };
+function FindingCard({
+  concern,
+  index,
+}: {
+  concern: EvaluationResult['concerns'][0];
+  index: number;
+}) {
+  const [open, setOpen] = useState(false);
+  const panelId = `finding-${concern.id}`;
 
   return (
-    <div className="min-h-screen bg-[#020617] text-slate-200">
-      <DashboardHeader onRefresh={() => setView('upload')} onOpenHelp={() => setShowHelp(true)} isAnalyzing={isAnalyzing} />
-      <NotificationOverlay notifications={notifications} onRemove={removeNotification} />
-      <HelpModal isOpen={showHelp} onClose={() => setShowHelp(false)} />
-
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {view === 'upload' ? (
-          <div className="max-w-6xl mx-auto space-y-8">
-            <div className="text-center py-6">
-              <h2 className="text-7xl font-black text-white mb-2 tracking-tighter uppercase italic">Agent <span className="text-indigo-500 underline decoration-indigo-500/30">Sentinel</span></h2>
-              <p className="text-slate-500 text-xl font-medium tracking-tight">Behavioral Anomaly & Alignment Diagnostic Platform.</p>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-              <div className="lg:col-span-4 space-y-6">
-                <div className="bg-slate-900/40 backdrop-blur-3xl border border-slate-800 rounded-[2.5rem] p-6 shadow-2xl relative group transition-all hover:border-indigo-500/40">
-                  <input 
-                    type="file" 
-                    ref={folderInputRef} 
-                    onChange={handleVirtualMount} 
-                    {...({ webkitdirectory: '', directory: '' } as any)} 
-                    multiple 
-                    className="hidden" 
-                  />
-                  
-                  <div className="flex items-center justify-between mb-6">
-                    <div className="flex items-center space-x-2">
-                      <Brain className="w-4 h-4 text-indigo-500" aria-hidden="true" />
-                      <h3 id="ingest-title" className="text-[10px] font-black text-white uppercase tracking-[0.2em]">Inference Trace Ingest</h3>
-                    </div>
-                  </div>
-
-                  {!directoryHandle ? (
-                    <div className="space-y-4">
-                      <button 
-                        onClick={() => folderInputRef.current?.click()} 
-                        aria-labelledby="ingest-title"
-                        className="w-full py-5 bg-indigo-600 hover:bg-indigo-500 text-white font-black rounded-2xl border-b-8 border-indigo-800 transition-all flex items-center justify-center space-x-3 text-lg shadow-xl shadow-indigo-900/40 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                      >
-                        <FolderOpen className="w-6 h-6" aria-hidden="true" />
-                        <span>Stage Trace Repository</span>
-                      </button>
-                      <button 
-                        onClick={handleLoadDemo} 
-                        className="w-full py-3 bg-slate-800/50 hover:bg-slate-800 text-slate-400 font-bold rounded-xl border border-slate-700 transition-all text-xs text-center focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                      >
-                        Load Safety Evaluation Trace Sample
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="h-[600px] flex flex-col">
-                      <div className="flex gap-2 mb-4 overflow-x-auto pb-2 scrollbar-none">
-                        <button onClick={() => bulkSelect('all')} className="px-3 py-1.5 bg-indigo-500/10 border border-indigo-500/30 rounded-lg text-[9px] font-black text-indigo-400 uppercase whitespace-nowrap">Load All Traces</button>
-                      </div>
-                      
-                      <FileBrowser files={fileTree} selectedPaths={selectedPaths} onToggleSelection={(p) => {
-                        const next = new Set(selectedPaths);
-                        if (next.has(p)) next.delete(p); else next.add(p);
-                        setSelectedPaths(next);
-                      }} searchTerm={searchTerm} setSearchTerm={setSearchTerm} isScanning={isScanning} />
-                      
-                      <div className="mt-4 flex items-center justify-between">
-                        <button onClick={() => setSelectedPaths(new Set())} className="text-[10px] font-black uppercase text-slate-600 hover:text-indigo-500">De-Stage</button>
-                        <button onClick={() => setDirectoryHandle(null)} className="text-[10px] font-black uppercase text-slate-600 hover:text-indigo-500">Eject Workspace</button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="lg:col-span-8 space-y-6 h-full">
-                <div className="bg-slate-900/40 backdrop-blur-3xl border border-slate-800 rounded-[2.5rem] p-8 shadow-2xl flex flex-col min-h-[700px] relative group">
-                  <div className="flex items-center justify-between mb-6">
-                    <div className="flex items-center space-x-3">
-                      <Terminal className="w-5 h-5 text-indigo-500" aria-hidden="true" />
-                      <h3 id="observation-title" className="text-xs font-black text-white uppercase tracking-widest">Evaluator Observation Workspace</h3>
-                    </div>
-                    {totalStagedBytes > 0 && (
-                      <div className="px-4 py-1.5 bg-indigo-500/10 rounded-full border border-indigo-500/20 text-[10px] font-black text-indigo-400 uppercase" role="status">
-                        {(totalStagedBytes / 1024).toFixed(1)} KB ACROSS {selectedPaths.size} TRACE FILES
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="flex-1 flex flex-col space-y-4">
-                    {stagedPreview.length > 0 && (
-                      <div className="bg-black/60 rounded-3xl border border-slate-800 p-6 space-y-4 shadow-inner overflow-hidden border-indigo-500/10" aria-label="Selected file previews">
-                        <div className="flex items-center space-x-2 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">
-                          <SearchCheck className="w-3 h-3 text-indigo-400" aria-hidden="true" />
-                          <span>Trace Sequence Matrix</span>
-                        </div>
-                        <div className="space-y-3 max-h-[250px] overflow-y-auto scrollbar-thin">
-                          {stagedPreview.map((p, i) => (
-                            <div key={i} className="group">
-                              <div className="flex items-center justify-between text-[9px] font-black text-indigo-400/50 mb-1 px-1 uppercase tracking-tighter">
-                                <span>{p.path}</span>
-                              </div>
-                              <div className="text-[10px] font-mono italic bg-slate-900/90 p-4 rounded-xl border border-slate-800/50 line-clamp-3 text-slate-400 whitespace-pre-wrap leading-relaxed shadow-inner">
-                                {p.content}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    <textarea 
-                      value={logInput} 
-                      onChange={(e) => setLogInput(e.target.value)} 
-                      aria-labelledby="observation-title"
-                      placeholder="Input constitutional policy divergences, observed behavioral drift, or suspected reasoning shortcuts..." 
-                      className="flex-1 bg-black/40 border border-slate-800 rounded-3xl p-8 text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 transition-all code-font text-base shadow-inner resize-none border-indigo-500/5" 
-                    />
-                  </div>
-
-                  <button 
-                    onClick={handleDeepScan} 
-                    disabled={isAnalyzing || (!logInput.trim() && selectedPaths.size === 0)} 
-                    aria-label={isAnalyzing ? 'Performing evaluation' : 'Perform safety evaluation'}
-                    className="mt-8 w-full py-8 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-black rounded-[2rem] transition-all flex items-center justify-center shadow-[0_20px_50px_rgba(79,70,229,0.3)] text-2xl border-b-[12px] border-indigo-900 active:translate-y-2 active:border-b-0 uppercase italic tracking-tighter focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  >
-                    {isAnalyzing ? <Loader2 className="w-8 h-8 mr-4 animate-spin" aria-hidden="true" /> : <ShieldCheck className="w-8 h-8 mr-4 fill-white" aria-hidden="true" />}
-                    <span>{isAnalyzing ? 'EVALUATING ALIGNMENT...' : 'PERFORM SAFETY EVALUATION'}</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className="space-y-10 animate-in fade-in slide-in-from-bottom-10 duration-300 pb-20">
-            <div className="flex items-center justify-between px-6">
-              <div className="flex items-center space-x-4">
-                <div className="px-6 py-2.5 bg-indigo-600 rounded-full border border-indigo-400/30 text-white font-black uppercase text-[10px] tracking-[0.3em] flex items-center space-x-2 shadow-xl shadow-indigo-950">
-                  <ShieldCheck className="w-4 h-4" />
-                  <span>Evaluation Protocol Verified</span>
-                </div>
-                <button 
-                  onClick={handleDownloadAudit}
-                  className="flex items-center space-x-2 px-6 py-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-full text-[10px] font-black uppercase text-slate-200 transition-all shadow-lg"
-                >
-                  <Download className="w-4 h-4 text-indigo-500" />
-                  <span>Download Safety Report</span>
-                </button>
-              </div>
-              <button onClick={() => setShowAuditTrace(!showAuditTrace)} className="flex items-center space-x-2 px-6 py-2.5 bg-slate-800/80 border border-slate-700 rounded-full text-[10px] font-black uppercase text-slate-400 hover:text-white transition-all shadow-lg">
-                <Code className="w-4 h-4" />
-                <span>{showAuditTrace ? 'Hide Trace Stream' : 'View Unified Trace Stream'}</span>
-              </button>
-            </div>
-
-            {showAuditTrace && (
-              <div className="bg-black/60 border border-indigo-500/20 rounded-[3rem] p-10 animate-in zoom-in duration-300 shadow-2xl">
-                <h4 className="text-[10px] font-black text-indigo-400 uppercase mb-6 tracking-[0.5em]">Unified Evaluation Trace</h4>
-                <pre 
-                  ref={traceRef}
-                  className="text-xs font-mono text-slate-500 bg-slate-950 p-8 rounded-2xl border border-slate-800/50 overflow-x-auto whitespace-pre max-h-[600px] scrollbar-thin"
-                >
-                  {data?.rawPayload?.split('\n').map((line, i) => {
-                    const lineNum = i + 1;
-                    const isHighlighted = highlightedLines && lineNum >= highlightedLines[0] && lineNum <= highlightedLines[1];
-                    return (
-                      <div 
-                        key={i} 
-                        id={`trace-line-${lineNum}`}
-                        className={`flex min-w-max transition-colors duration-500 ${isHighlighted ? 'bg-indigo-500/20 text-indigo-300 ring-1 ring-indigo-500/50' : ''}`}
-                      >
-                        <span className="w-12 shrink-0 text-right pr-4 select-none opacity-30 border-r border-slate-800 mr-4 font-mono text-[9px] py-0.5">
-                          {lineNum}
-                        </span>
-                        <span className="py-0.5">{line}</span>
-                      </div>
-                    );
-                  })}
-                </pre>
-              </div>
-            )}
-
-            {data?.evaluatorMetadata && (
-              <div className="bg-slate-900/60 border border-slate-800 rounded-[2rem] p-6 animate-in fade-in slide-in-from-top-4 duration-500 flex flex-wrap items-center gap-8 shadow-xl backdrop-blur-md transition-all hover:border-indigo-500/20">
-                <div className="flex items-center space-x-3">
-                  <Cpu className="w-5 h-5 text-indigo-400" />
-                  <div>
-                    <h5 className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Evaluator Model</h5>
-                    <p className="text-xs font-black text-white">{data.evaluatorMetadata.modelId}</p>
-                  </div>
-                </div>
-                <div className="flex items-center space-x-3">
-                  <RefreshCw className="w-5 h-5 text-indigo-400" />
-                  <div>
-                    <h5 className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Evaluator Version</h5>
-                    <p className="text-xs font-black text-white">{data.evaluatorMetadata.version}</p>
-                  </div>
-                </div>
-                <div className="flex items-center space-x-3">
-                  <Settings className="w-5 h-5 text-indigo-400" />
-                  <div>
-                    <h5 className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Thinking Budget</h5>
-                    <p className="text-xs font-black text-white">{data.evaluatorMetadata.parameters['thinkingBudget']} Tokens</p>
-                  </div>
-                </div>
-                <div className="ml-auto flex items-center space-x-3 pr-4">
-                  <Info className="w-4 h-4 text-slate-600" />
-                  <span className="text-[10px] font-bold text-slate-600 uppercase tracking-[0.2em]">Audit Timestamp: {new Date(data.evaluatorMetadata.timestamp).toLocaleString()}</span>
-                </div>
-              </div>
-            )}
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6">
-              <StatCard title="Alignment Divergence" value={`${100 - (data?.stats.alignmentScore || 0)}%`} icon={Brain} color="bg-indigo-500" />
-              <StatCard title="Policy Adherence" value={`${data?.stats.resourceIntegrity}%`} icon={ShieldCheck} color="bg-indigo-600" />
-              <StatCard title="Constitutional Compliance" value={`${data?.stats.policyComplianceScore}%`} icon={Scale} color="bg-indigo-500" />
-              <StatCard title="Alignment Divergences" value={data?.stats.concernCount || 0} icon={Fingerprint} color="bg-indigo-400" />
-              <StatCard title="Critical Risks" value={data?.stats.criticalRisks || 0} icon={AlertCircle} color="bg-rose-700" />
-              <StatCard title="Files Evaluated" value={data?.stats.processedEntries || 0} icon={Layers} color="bg-slate-500" />
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
-              <div className="lg:col-span-8 space-y-10">
-                <div className="bg-slate-900/40 border border-slate-800 rounded-[3rem] p-10 shadow-2xl backdrop-blur-md transition-all hover:border-indigo-500/20 border-indigo-500/5">
-                  <h3 className="text-xl font-black text-white uppercase mb-10 flex items-center">
-                    <Activity className="w-6 h-6 mr-4 text-indigo-500" />
-                    Alignment Risk Profile
-                  </h3>
-                  <div className="h-96 w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={data?.riskTrend ?? []}>
-                        <defs>
-                          <linearGradient id="colorScore" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#6366f1" stopOpacity={0.6}/>
-                            <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
-                          </linearGradient>
-                        </defs>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
-                        <XAxis dataKey="time" stroke="#475569" fontSize={10} tickLine={false} axisLine={false} />
-                        <YAxis stroke="#475569" fontSize={10} tickLine={false} axisLine={false} />
-                        <Tooltip contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #334155', borderRadius: '24px' }} />
-                        <Area type="monotone" dataKey="score" stroke="#6366f1" fillOpacity={1} fill="url(#colorScore)" strokeWidth={4} />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-
-                <div className="bg-slate-900/40 border border-slate-800 rounded-[3rem] p-12 shadow-2xl relative overflow-hidden group border-indigo-500/5">
-                  <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:opacity-20 transition-opacity">
-                    <Shield className="w-32 h-32 text-indigo-500" />
-                  </div>
-                  <h3 className="text-xl font-black text-white uppercase mb-8 flex items-center">
-                    <MessageSquare className="w-6 h-6 mr-4 text-indigo-500" />
-                    Safety Evaluation Summary
-                  </h3>
-                  <p className="text-slate-300 leading-relaxed text-3xl italic font-medium px-8 border-l-8 border-indigo-600">
-                    {data?.summary}
-                  </p>
-                </div>
-              </div>
-
-              <div className="lg:col-span-4 space-y-8">
-                <div className="flex items-center justify-between px-4">
-                  <h3 className="text-xl font-black text-white uppercase">Trace Divergence Log</h3>
-                  <div className="p-2 bg-indigo-600 rounded-lg text-[10px] font-black text-white uppercase shadow-lg animate-pulse">Live Analysis Active</div>
-                </div>
-                <div className="space-y-4 max-h-[1200px] overflow-y-auto pr-3 scrollbar-thin">
-                  {data?.concerns.map((concern) => (
-                    <AnomalyItem key={concern.id} concern={concern} onSelectTrace={scrollToTraceLine} />
-                  ))}
-                  {data?.concerns.length === 0 && (
-                    <div className="py-32 text-center border-4 border-dotted border-slate-800 rounded-[3rem]">
-                      <ShieldCheck className="w-16 h-16 text-slate-800 mx-auto mb-6" />
-                      <p className="text-slate-600 font-black uppercase text-xs tracking-[0.4em]">Zero Alignment Divergences Detected</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-      </main>
-      
-      {showBanner && (
-        <div 
-          role="complementary" 
-          aria-label="Platform Version Information"
-          className="fixed bottom-10 left-1/2 -translate-x-1/2 px-12 py-5 bg-slate-900/90 backdrop-blur-3xl border border-indigo-500/20 rounded-full flex items-center space-x-12 shadow-[0_50px_100px_-20px_rgba(79,70,229,0.3)] z-50"
-        >
-          <div className="flex items-center space-x-4">
-            <div className="w-3 h-3 rounded-full bg-indigo-500 animate-pulse shadow-[0_0_15px_rgba(79,70,229,1)]" aria-hidden="true" />
-            <span className="text-xs font-black tracking-[0.4em] text-white uppercase italic">Agent Sentinel • Behavioral Anomaly Diagnostic Suite v1.0</span>
-          </div>
-          <button 
-            onClick={() => setShowBanner(false)}
-            aria-label="Dismiss platform information banner"
-            className="p-1 hover:bg-white/10 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500"
+    <div className="bg-slate-900/60 border border-slate-800 rounded-3xl overflow-hidden transition-all">
+      {/* Header row — always visible */}
+      <button
+        className="w-full flex items-center justify-between gap-4 p-6 text-left focus:outline-none focus:ring-2 focus:ring-inset focus:ring-indigo-500/50 hover:bg-slate-800/30 transition-colors"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-controls={panelId}
+      >
+        <div className="flex items-center gap-4 min-w-0">
+          {/* Number badge */}
+          <span className="shrink-0 w-8 h-8 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-xs font-black text-slate-400">
+            {index + 1}
+          </span>
+          {/* Severity */}
+          <span
+            className={`shrink-0 px-3 py-1 rounded-xl text-[10px] font-black border uppercase tracking-widest ${SEVERITY_STYLE[concern.severity]}`}
           >
-            <X className="w-4 h-4 text-slate-500" aria-hidden="true" />
-          </button>
+            {concern.severity}
+          </span>
+          {/* Description */}
+          <span className="text-sm font-bold text-slate-100 truncate">
+            {concern.description}
+          </span>
+        </div>
+        {open ? (
+          <ChevronUp className="shrink-0 w-5 h-5 text-slate-500" aria-hidden="true" />
+        ) : (
+          <ChevronDown className="shrink-0 w-5 h-5 text-slate-500" aria-hidden="true" />
+        )}
+      </button>
+
+      {/* Expanded detail */}
+      {open && (
+        <div
+          id={panelId}
+          className="p-6 border-t border-slate-800/60 bg-slate-950/40 space-y-5"
+        >
+          {/* What the AI found */}
+          <section>
+            <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] mb-2">
+              What the AI found
+            </h4>
+            <p className="text-sm text-slate-300 bg-slate-900/80 rounded-2xl p-4 border border-slate-800 leading-relaxed font-mono whitespace-pre-wrap">
+              {concern.evidence}
+            </p>
+          </section>
+
+          {/* What to do about it — Specific */}
+          <section>
+            <h4 className="text-[10px] font-black text-indigo-400 uppercase tracking-[0.3em] mb-3">
+              What to do about it — specific to these logs
+            </h4>
+            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-2">
+              These steps reference the exact content in the logs you submitted.
+            </p>
+            <ol className="space-y-2">
+              {Array.isArray(concern.recommendation?.specific)
+                ? concern.recommendation.specific.map((step, i) => (
+                    <li
+                      key={i}
+                      className="flex gap-3 bg-indigo-500/5 border border-indigo-500/15 rounded-2xl p-4"
+                    >
+                      <span className="shrink-0 w-6 h-6 rounded-lg bg-indigo-600/30 border border-indigo-500/30 flex items-center justify-center text-[10px] font-black text-indigo-300">
+                        {i + 1}
+                      </span>
+                      <p className="text-sm text-slate-200 leading-relaxed">{step.replace(/^Step \d+:\s*/i, '')}</p>
+                    </li>
+                  ))
+                : (
+                    <li className="text-sm text-slate-400 italic p-4 bg-slate-900/60 rounded-2xl border border-slate-800">
+                      No specific steps available.
+                    </li>
+                  )}
+            </ol>
+          </section>
+
+          {/* What to do about it — General */}
+          <section>
+            <h4 className="text-[10px] font-black text-emerald-400 uppercase tracking-[0.3em] mb-3">
+              What to do about it — general playbook
+            </h4>
+            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-2">
+              These steps apply to any system where this type of issue appears.
+            </p>
+            <ol className="space-y-2">
+              {Array.isArray(concern.recommendation?.general)
+                ? concern.recommendation.general.map((step, i) => (
+                    <li
+                      key={i}
+                      className="flex gap-3 bg-emerald-500/5 border border-emerald-500/15 rounded-2xl p-4"
+                    >
+                      <span className="shrink-0 w-6 h-6 rounded-lg bg-emerald-600/30 border border-emerald-500/30 flex items-center justify-center text-[10px] font-black text-emerald-300">
+                        {i + 1}
+                      </span>
+                      <p className="text-sm text-slate-200 leading-relaxed">{step.replace(/^Step \d+:\s*/i, '')}</p>
+                    </li>
+                  ))
+                : null}
+            </ol>
+          </section>
+
+          {/* Meta row */}
+          {(concern.sourceFile || concern.lineStart) && (
+            <div className="flex flex-wrap gap-4 text-[10px] font-bold text-slate-500 uppercase tracking-wide">
+              {concern.sourceFile && <span>File: {concern.sourceFile}</span>}
+              {concern.lineStart && concern.lineEnd && (
+                <span>Lines {concern.lineStart}–{concern.lineEnd}</span>
+              )}
+              <span>Type: {concern.category}</span>
+            </div>
+          )}
         </div>
       )}
     </div>
   );
-};
+}
 
-export default App;
+// ─── Stat pill ────────────────────────────────────────────────────────────────
+
+function Stat({ label, value, highlight }: { label: string; value: string | number; highlight?: boolean }) {
+  return (
+    <div className={`flex flex-col items-center gap-1 px-6 py-4 rounded-2xl border
+      ${highlight ? 'bg-rose-500/10 border-rose-500/20' : 'bg-slate-900/60 border-slate-800'}`}>
+      <span className={`text-2xl font-black ${highlight ? 'text-rose-300' : 'text-white'}`}>
+        {value}
+      </span>
+      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest text-center">
+        {label}
+      </span>
+    </div>
+  );
+}
+
+// ─── Main App ─────────────────────────────────────────────────────────────────
+
+export default function App() {
+  const [step, setStep] = useState(0); // 0 = add logs, 1 = describe, 2 = report
+  const [logText, setLogText] = useState('');
+  const [observation, setObservation] = useState('');
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [result, setResult] = useState<EvaluationResult | null>(null);
+  const [error, setError] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // ── File picker handler ───────────────────────────────────────────────────
+  const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    if (files.length === 0) return;
+    const readers = files.map(
+      (f) =>
+        new Promise<string>((resolve) => {
+          const r = new FileReader();
+          r.onload = () => resolve(`\n--- ${f.name} ---\n${r.result as string}`);
+          r.readAsText(f);
+        })
+    );
+    Promise.all(readers).then((parts) =>
+      setLogText((prev) => (prev ? prev + parts.join('\n') : parts.join('\n').trim()))
+    );
+    // Reset the input so the same file can be re-added if needed
+    e.target.value = '';
+  }, []);
+
+  // ── Run analysis ──────────────────────────────────────────────────────────
+  const handleAnalyze = useCallback(async () => {
+    if (!logText.trim()) return;
+    setIsAnalyzing(true);
+    setError('');
+    try {
+      const combined = observation.trim()
+        ? `${logText}\n\nNOTE FROM HUMAN REVIEWER:\n${observation}`
+        : logText;
+      const data = await analyzeAgentLogs(combined);
+      setResult(data);
+      setStep(2);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setIsAnalyzing(false);
+    }
+  }, [logText, observation]);
+
+  // ── Download audit JSON ───────────────────────────────────────────────────
+  const handleDownload = useCallback(() => {
+    if (!result) return;
+    const blob = new Blob([JSON.stringify(result, null, 2)], {
+      type: 'application/json',
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `AGENT_SENTINEL_REPORT_${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, [result]);
+
+  // ── Start over ─────────────────────────────────────────────────────────────
+  const handleReset = useCallback(() => {
+    setStep(0);
+    setLogText('');
+    setObservation('');
+    setResult(null);
+    setError('');
+  }, []);
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // RENDER
+  // ─────────────────────────────────────────────────────────────────────────
+  return (
+    <div className="min-h-screen bg-[#020617] text-slate-200">
+      {/* ── App header ─────────────────────────────────────────────────────── */}
+      <header className="border-b border-slate-800/60 px-6 py-5 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <ShieldCheck className="w-6 h-6 text-indigo-400" aria-hidden="true" />
+          <div>
+            <h1 className="text-base font-black text-white uppercase tracking-widest leading-none">
+              Agent Sentinel
+            </h1>
+            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-[0.2em]">
+              AI Behavior Audit Tool
+            </p>
+          </div>
+        </div>
+        {step === 2 && result && (
+          <div className="flex gap-3">
+            <button
+              onClick={handleDownload}
+              className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-xs font-black text-slate-200 uppercase tracking-wide transition-all"
+            >
+              <Download className="w-4 h-4 text-indigo-400" aria-hidden="true" />
+              Download Report
+            </button>
+            <button
+              onClick={handleReset}
+              className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-xs font-black text-slate-200 uppercase tracking-wide transition-all"
+            >
+              <RotateCcw className="w-4 h-4 text-slate-400" aria-hidden="true" />
+              Start Over
+            </button>
+          </div>
+        )}
+      </header>
+
+      {/* ── Main content ───────────────────────────────────────────────────── */}
+      <main className="max-w-4xl mx-auto px-4 py-10">
+        <StepBar current={step} />
+
+        {/* ════════════════════════════════════════════════════════════════════
+            STEP 1 — ADD LOGS
+        ════════════════════════════════════════════════════════════════════ */}
+        {step === 0 && (
+          <section aria-labelledby="step1-heading">
+            <div className="text-center mb-8">
+              <h2
+                id="step1-heading"
+                className="text-3xl font-black text-white uppercase tracking-tighter mb-2"
+              >
+                Add your AI logs
+              </h2>
+              <p className="text-slate-400 text-base max-w-xl mx-auto leading-relaxed">
+                These are the text records of what your AI did. You can upload files
+                or paste the text directly into the box below. You need at least one.
+              </p>
+            </div>
+
+            {/* Upload button */}
+            <div className="mb-6">
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                accept=".txt,.log,.json,.md,.yaml,.yml,.csv"
+                onChange={handleFileChange}
+                className="hidden"
+                aria-label="Upload log files"
+              />
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="w-full py-6 flex items-center justify-center gap-3 bg-indigo-600 hover:bg-indigo-500 text-white font-black rounded-2xl border-b-8 border-indigo-900 transition-all text-lg shadow-xl shadow-indigo-900/30 active:translate-y-1 active:border-b-2 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+              >
+                <Upload className="w-6 h-6" aria-hidden="true" />
+                Click here to choose log files from your computer
+              </button>
+              <p className="text-center text-xs text-slate-600 mt-2 uppercase tracking-wide">
+                Accepted: .txt · .log · .json · .md · .yaml · .csv
+              </p>
+            </div>
+
+            {/* Divider */}
+            <div className="flex items-center gap-4 mb-6">
+              <div className="flex-1 h-px bg-slate-800" aria-hidden="true" />
+              <span className="text-xs text-slate-600 font-bold uppercase tracking-widest">
+                or paste text below
+              </span>
+              <div className="flex-1 h-px bg-slate-800" aria-hidden="true" />
+            </div>
+
+            {/* Text area */}
+            <textarea
+              value={logText}
+              onChange={(e) => setLogText(e.target.value)}
+              placeholder="Paste your AI log text here. It can be in any format — plain text, JSON, structured logs, anything."
+              rows={12}
+              aria-label="Log text input"
+              className="w-full bg-slate-900/60 border border-slate-700 focus:border-indigo-500/60 rounded-2xl p-6 text-slate-200 text-sm font-mono leading-relaxed resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500/30 transition-all"
+            />
+
+            {logText.trim() && (
+              <p className="mt-2 text-xs text-indigo-400 font-bold uppercase tracking-wide" role="status">
+                <CheckCircle2 className="inline w-3 h-3 mr-1" aria-hidden="true" />
+                {logText.split('\n').length} lines ready
+              </p>
+            )}
+
+            {/* Next button */}
+            <button
+              onClick={() => setStep(1)}
+              disabled={!logText.trim()}
+              className="mt-8 w-full py-6 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-30 disabled:cursor-not-allowed text-white font-black rounded-2xl border-b-8 border-indigo-900 transition-all text-xl shadow-xl shadow-indigo-900/30 active:translate-y-1 active:border-b-2 uppercase italic tracking-tighter focus:outline-none focus:ring-2 focus:ring-indigo-400"
+            >
+              Next — Describe what you noticed →
+            </button>
+          </section>
+        )}
+
+        {/* ════════════════════════════════════════════════════════════════════
+            STEP 2 — DESCRIBE
+        ════════════════════════════════════════════════════════════════════ */}
+        {step === 1 && (
+          <section aria-labelledby="step2-heading">
+            <div className="text-center mb-8">
+              <h2
+                id="step2-heading"
+                className="text-3xl font-black text-white uppercase tracking-tighter mb-2"
+              >
+                Describe what you noticed
+              </h2>
+              <p className="text-slate-400 text-base max-w-xl mx-auto leading-relaxed">
+                In plain words, describe anything that seemed off. You do not need
+                technical language. This is optional — skip it if you have nothing to add.
+              </p>
+            </div>
+
+            <textarea
+              value={observation}
+              onChange={(e) => setObservation(e.target.value)}
+              placeholder={
+                'Examples:\n' +
+                '• "The AI started giving shorter answers and stopped citing sources."\n' +
+                '• "It said it could not access the file, but then it did anyway."\n' +
+                '• "Nothing seemed wrong — I just want a full check."\n\n' +
+                'Type your own observation here, or leave this blank and click Run Analysis.'
+              }
+              rows={10}
+              aria-label="Human observation input"
+              className="w-full bg-slate-900/60 border border-slate-700 focus:border-indigo-500/60 rounded-2xl p-6 text-slate-200 text-sm leading-relaxed resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500/30 transition-all"
+            />
+
+            {error && (
+              <div
+                role="alert"
+                className="mt-4 p-4 bg-rose-500/10 border border-rose-500/30 rounded-2xl text-rose-300 text-sm"
+              >
+                <AlertTriangle className="inline w-4 h-4 mr-2" aria-hidden="true" />
+                {error}
+              </div>
+            )}
+
+            {/* Back / Run */}
+            <div className="mt-8 flex flex-col sm:flex-row gap-4">
+              <button
+                onClick={() => setStep(0)}
+                className="sm:w-1/3 py-5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 font-black rounded-2xl transition-all text-base uppercase tracking-tight focus:outline-none focus:ring-2 focus:ring-slate-500"
+              >
+                ← Back
+              </button>
+              <button
+                onClick={handleAnalyze}
+                disabled={isAnalyzing}
+                className="flex-1 py-5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-black rounded-2xl border-b-8 border-indigo-900 transition-all text-xl shadow-xl shadow-indigo-900/30 active:translate-y-1 active:border-b-2 uppercase italic tracking-tighter flex items-center justify-center gap-3 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+              >
+                {isAnalyzing ? (
+                  <>
+                    <Loader2 className="w-6 h-6 animate-spin" aria-hidden="true" />
+                    Running analysis — this takes about 15–30 seconds…
+                  </>
+                ) : (
+                  <>
+                    <ShieldCheck className="w-6 h-6 fill-white" aria-hidden="true" />
+                    Run Analysis
+                  </>
+                )}
+              </button>
+            </div>
+          </section>
+        )}
+
+        {/* ════════════════════════════════════════════════════════════════════
+            STEP 3 — REPORT
+        ════════════════════════════════════════════════════════════════════ */}
+        {step === 2 && result && (
+          <section aria-labelledby="step3-heading">
+            <div className="text-center mb-10">
+              <h2
+                id="step3-heading"
+                className="text-3xl font-black text-white uppercase tracking-tighter mb-2"
+              >
+                Your report is ready
+              </h2>
+              <p className="text-slate-400 text-base max-w-xl mx-auto leading-relaxed">
+                {result.summary}
+              </p>
+            </div>
+
+            {/* Stats row */}
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-10">
+              <Stat
+                label="Alignment Score"
+                value={`${result.stats.alignmentScore}%`}
+              />
+              <Stat
+                label="Policy Compliance"
+                value={`${result.stats.policyComplianceScore}%`}
+              />
+              <Stat
+                label="Total Issues Found"
+                value={result.stats.concernCount}
+                highlight={result.stats.concernCount > 0}
+              />
+              <Stat
+                label="Critical Risks"
+                value={result.stats.criticalRisks}
+                highlight={result.stats.criticalRisks > 0}
+              />
+              <Stat
+                label="Log Lines Checked"
+                value={result.stats.processedEntries}
+              />
+              <Stat
+                label="Data Source"
+                value={result.stats.provenance === 'LIVE_SYSTEM' ? 'Live' : 'Demo'}
+              />
+            </div>
+
+            {/* Risk trend chart */}
+            {result.riskTrend && result.riskTrend.length > 0 && (
+              <div className="bg-slate-900/40 border border-slate-800 rounded-3xl p-8 mb-10">
+                <div className="flex items-center gap-3 mb-6">
+                  <Activity className="w-5 h-5 text-indigo-400" aria-hidden="true" />
+                  <h3 className="text-sm font-black text-white uppercase tracking-widest">
+                    Risk Over Time
+                  </h3>
+                </div>
+                <div className="h-56">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={result.riskTrend}>
+                      <defs>
+                        <linearGradient id="riskGrad" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#6366f1" stopOpacity={0.5} />
+                          <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+                      <XAxis dataKey="time" stroke="#475569" fontSize={10} tickLine={false} axisLine={false} />
+                      <YAxis stroke="#475569" fontSize={10} tickLine={false} axisLine={false} />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: '#0f172a',
+                          border: '1px solid #334155',
+                          borderRadius: '16px',
+                        }}
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="score"
+                        stroke="#6366f1"
+                        fill="url(#riskGrad)"
+                        strokeWidth={3}
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            )}
+
+            {/* Findings list */}
+            {result.concerns && result.concerns.length > 0 ? (
+              <div>
+                <h3 className="text-sm font-black text-white uppercase tracking-widest mb-4 flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-indigo-400" aria-hidden="true" />
+                  {result.concerns.length} Finding{result.concerns.length !== 1 ? 's' : ''} — click any row to expand
+                </h3>
+                <div className="space-y-3">
+                  {result.concerns.map((c, i) => (
+                    <FindingCard key={c.id} concern={c} index={i} />
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-16 border border-slate-800 rounded-3xl">
+                <CheckCircle2 className="w-12 h-12 text-indigo-400 mx-auto mb-4" aria-hidden="true" />
+                <p className="text-lg font-black text-white uppercase tracking-tight">
+                  No issues found
+                </p>
+                <p className="text-slate-500 text-sm mt-2">
+                  The AI did not detect any alignment problems in your logs.
+                </p>
+              </div>
+            )}
+
+            {/* Bottom action row */}
+            <div className="mt-10 flex flex-col sm:flex-row gap-4">
+              <button
+                onClick={handleDownload}
+                className="flex items-center justify-center gap-3 flex-1 py-5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white font-black rounded-2xl text-base uppercase tracking-tight transition-all focus:outline-none focus:ring-2 focus:ring-slate-500"
+              >
+                <Download className="w-5 h-5 text-indigo-400" aria-hidden="true" />
+                Download Full Report (JSON)
+              </button>
+              <button
+                onClick={handleReset}
+                className="flex items-center justify-center gap-3 flex-1 py-5 bg-indigo-600 hover:bg-indigo-500 text-white font-black rounded-2xl border-b-8 border-indigo-900 transition-all text-base uppercase tracking-tight shadow-xl active:translate-y-1 active:border-b-2 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+              >
+                <RotateCcw className="w-5 h-5" aria-hidden="true" />
+                Analyze Another Set of Logs
+              </button>
+            </div>
+          </section>
+        )}
+      </main>
+    </div>
+  );
+}

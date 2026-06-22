@@ -17,8 +17,11 @@ export default defineConfig(({ mode }) => {
     },
     plugins: [react()],
     define: {
-      'process.env.API_KEY': JSON.stringify(env['GEMINI_API_KEY']),
-      'process.env.GEMINI_API_KEY': JSON.stringify(env['GEMINI_API_KEY']),
+      // Legacy Gemini keys kept for backward compat during transition
+      'process.env.API_KEY': JSON.stringify(env['GEMINI_API_KEY'] ?? ''),
+      'process.env.GEMINI_API_KEY': JSON.stringify(env['GEMINI_API_KEY'] ?? ''),
+      // New provider-agnostic key — set VITE_OPENROUTER_API_KEY in .env.local
+      'import.meta.env.VITE_OPENROUTER_API_KEY': JSON.stringify(env['VITE_OPENROUTER_API_KEY'] ?? ''),
       '__APP_VERSION__': JSON.stringify(process.env['npm_package_version'] || '1.0.0'),
     },
     resolve: {

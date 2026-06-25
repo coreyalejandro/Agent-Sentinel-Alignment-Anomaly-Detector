@@ -60,7 +60,7 @@ export const validateLogContent = (content: string): ValidationResult => {
   }
 
   if (content.length > 10 * 1024 * 1024) { // 10MB limit for log content
-    errors.push('Log content is too large (maximum 10MB)');
+    errors.push('Log content exceeds maximum size limit');
   }
 
   // Check for potentially malicious content
@@ -88,23 +88,39 @@ export const validateLogContent = (content: string): ValidationResult => {
 };
 
 export const sanitizeInput = (input: string): string => {
-  return input
-    .replace(/[<>]/g, '') // Remove potential HTML tags
+  const decodeHtmlEntities = (value: string): string => {
+    const entityMap: Record<string, string> = {
+      '&lt;': '<',
+      '&gt;': '>',
+      '&amp;': '&',
+      '&quot;': '"',
+      '&#39;': "'",
+    };
+
+    return value.replace(/(&lt;|&gt;|&amp;|&quot;|&#39;)/g, (entity) => entityMap[entity] || entity);
+  };
+
+  const sanitized = input
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+    .replace(/<[^>]*>/g, '')
     .replace(/javascript:/gi, '') // Remove javascript: protocols
     .replace(/data:text\/html/gi, '') // Remove data URLs
+    .replace(/vbscript:/gi, '')
     .trim();
+
+  return decodeHtmlEntities(sanitized);
 };
 
 export const validateApiKey = (apiKey: string, provider: 'gemini' | 'groq'): ValidationResult => {
   const errors: string[] = [];
 
   if (!apiKey || apiKey.trim().length === 0) {
-    errors.push(`${provider} API key is required`);
+    errors.push('API key cannot be empty');
   }
 
   // Basic format validation
   if (provider === 'gemini' && apiKey && !apiKey.startsWith('AI')) {
-    errors.push('Gemini API key should start with "AI"');
+    errors.push('Invalid API key format for gemini');
   }
 
   if (provider === 'groq' && apiKey && apiKey.length < 20) {
